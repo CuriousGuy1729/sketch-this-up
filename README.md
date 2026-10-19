@@ -264,14 +264,20 @@ numbers by one to two orders of magnitude.
 Extrapolating the table, the full 840-frame 4K/1024spp deliverable is a
 render-farm job, not a two-core job — which is why the frame loop is
 resumable and why `--encode-only` exists. `output/black_hole_4k_preview.mp4`
-is a **proof clip** rendered here end-to-end through the real pipeline: 180
-frames, 3 s at a true 60 fps, 384×216, showing the camera push-in, the disk
-shear, and the lensed star field in motion. Produced with
+is a **proof clip** rendered here end-to-end through the real pipeline: 240
+frames, 4 s at a true 60 fps, 384×216, 96 shells, 202 minutes of CPU render.
+It shows the camera push-in, the Keplerian disk shear, the lensed far side
+arcing over the shadow, and the star field sliding through the Einstein ring.
+Produced with
 
 ```bash
 python main.py --render-and-encode -q preview \
-    --resolution 384 216 --samples 12 --shells 40 --seconds 3
+    --resolution 384 216 --samples 8 --shells 96 --seconds 4
 ```
+
+Budget went into **shells, not pixels or samples**: at 40 shells the same
+clip renders in a third of the time but bands visibly, and no amount of
+sampling fixes that.
 
 Swap in `-q final` for the 3840×2160 version; nothing else changes.
 
