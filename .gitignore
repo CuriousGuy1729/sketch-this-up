@@ -1,0 +1,10 @@
+# Render artifacts -- regenerate with `python main.py --render`
+output/
+*.mp4
+*.blend
+*.blend1
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
