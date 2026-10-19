@@ -38,6 +38,7 @@ blender -b -P main.py -- --preview
 | `python main.py --render-and-encode` | the above, then muxes `black_hole_4k.mp4` with FFmpeg |
 | `python main.py --encode-only` | re-encode existing frames (change CRF without re-rendering) |
 | `python main.py --validate` | runs the physics test suite |
+| `python main.py --build-only` | builds the scene and saves the `.blend`, renders nothing |
 
 Useful flags: `-q {thumb,preview,high,final}`, `--resolution W H`, `--samples`,
 `--shells`, `--seconds`, `--spin`, `--frame`, `--start/--end`, `--overwrite`,
@@ -219,18 +220,32 @@ at b = 15 r_s.
 Cost is dominated by shell crossings — every one is a transparent bounce.
 Measured on **2 CPU cores** (no GPU):
 
-| preset | resolution | spp | shells | approx / frame |
-|---|---|---|---|---|
-| `thumb` | 480×270 | 24 | 40 | ~100 s |
-| `preview` | 960×540 | 64 | 64 | ~15 min |
-| `final` | 3840×2160 | 1024 | 128 | hours |
+| resolution | spp | shells | measured / frame |
+|---|---|---|---|
+| 384×216 | 12 | 40 | 46 s |
+| 480×270 | 20 | 40 | 103 s |
+| 480×270 | 20 | 112 | 268 s |
+| 560×315 | 24 | 96 | 362 s |
 
-Cycles uses the GPU automatically where one is available (`scene.py` enables
-every compute device it finds), which changes these numbers by one to two
-orders of magnitude. The 840-frame 4K deliverable is a render-farm job, not a
-laptop job — which is why the frame loop is resumable and why `--encode-only`
-exists.
+Note how shell count dominates: 40 → 112 shells nearly triples the cost at
+fixed resolution. Cycles uses the GPU automatically where one is available
+(`scene.py` enables every compute device it finds), which changes these
+numbers by one to two orders of magnitude.
 
-`output/` holds the frames, `config.json` for the run, the `.blend`, and the
-MP4. Encoding is H.264 `-crf 14 -preset slow`, `yuv420p`, BT.709-tagged,
+Extrapolating the table, the full 840-frame 4K/1024spp deliverable is a
+render-farm job, not a two-core job — which is why the frame loop is
+resumable and why `--encode-only` exists. `output/black_hole_4k_preview.mp4`
+is a **proof clip** rendered here end-to-end through the real pipeline: 180
+frames, 3 s at a true 60 fps, 384×216, showing the camera push-in, the disk
+shear, and the lensed star field in motion. Produced with
+
+```bash
+python main.py --render-and-encode -q preview \
+    --resolution 384 216 --samples 12 --shells 40 --seconds 3
+```
+
+Swap in `-q final` for the 3840×2160 version; nothing else changes.
+
+`output/` holds the frames, `config.json` for the run, `black_hole.blend`
+(saved at full `final` settings), and the MP4. Encoding is H.264 `-crf 14 -preset slow`, `yuv420p`, BT.709-tagged,
 `+faststart`.

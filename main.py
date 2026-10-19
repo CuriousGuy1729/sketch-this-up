@@ -55,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
                       help="encode already-rendered frames and stop")
     mode.add_argument("--validate", action="store_true",
                       help="run the physics self-checks (no Blender needed)")
+    mode.add_argument("--build-only", dest="build_only", action="store_true",
+                      help="build the scene and save the .blend, render nothing")
 
     opt = p.add_argument_group("options")
     opt.add_argument("-q", "--quality",
@@ -78,6 +80,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="override the shot length in seconds")
     opt.add_argument("--spin", type=float, default=None,
                      help="dimensionless Kerr spin a* in [0, 0.999]")
+    opt.add_argument("--nebula-width", type=int, default=None,
+                     dest="nebula_width",
+                     help="equirect width of the synthesised nebula; lower it "
+                          "if the 8K default is too heavy for your RAM")
     opt.add_argument("--output-dir", default=None,
                      help="where frames, the .blend and the MP4 go")
     opt.add_argument("--no-blend", action="store_true",
@@ -93,11 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(_argv() if argv is None else argv)
 
     modes = (args.preview, args.render, args.render_and_encode,
-             args.encode_only, args.validate)
+             args.encode_only, args.validate, args.build_only)
     if sum(bool(m) for m in modes) != 1:
         build_parser().print_help()
         print("\nerror: pick exactly one of --preview, --render, "
-              "--render-and-encode, --encode-only, --validate",
+              "--render-and-encode, --encode-only, --validate, --build-only",
               file=sys.stderr)
         return 2
 
@@ -112,7 +118,8 @@ def main(argv: list[str] | None = None) -> int:
     overrides = {}
     if args.resolution:
         overrides["resolution_x"], overrides["resolution_y"] = args.resolution
-    for key in ("samples", "shells", "duration_seconds", "spin"):
+    for key in ("samples", "shells", "duration_seconds", "spin",
+                "nebula_width"):
         if getattr(args, key) is not None:
             overrides[key] = getattr(args, key)
 
@@ -155,6 +162,10 @@ def main(argv: list[str] | None = None) -> int:
 
     with open(os.path.join(cfg.output_dir, "config.json"), "w") as fh:
         fh.write(cfg.to_json())
+
+    if args.build_only:
+        print("[build] scene built and saved; nothing rendered")
+        return 0
 
     # ------------------------------------------------------------------ preview
     if args.preview:
