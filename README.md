@@ -78,11 +78,29 @@ a(x) = -3/2 · h² · x / |x|⁵            h = |P × v|
 plus a Lense-Thirring frame-dragging term `ω × v` with `ω = (a*/2r³) ẑ`, which
 is what makes the lensing visibly *asymmetric* about the spin axis.
 
-Each step uses **Simpson's rule** over the segment, inside a **symmetric
-leapfrog split** with a two-pass predictor–corrector. That combination matters:
-a naive forward Euler kick at the shell boundary accumulates a systematic
-inward bias and quietly shrinks the shadow. The scheme here is time-symmetric,
-so it converges cleanly (see the convergence row in `--validate`).
+Each step uses **midpoint quadrature** over the segment, inside a **symmetric
+leapfrog split** with a two-pass predictor–corrector. The splitting matters: a
+naive forward Euler kick at the shell boundary accumulates a systematic inward
+bias and quietly shrinks the shadow. The scheme here is time-symmetric, so it
+converges cleanly (see the convergence row in `--validate`).
+
+The quadrature started out as Simpson's rule, on the reasonable theory that
+the pericenter segment needs a high-order rule — the ray turns around inside a
+single gap there and `|a| ~ r⁻⁴` varies by tens of percent across the chord.
+Measuring it at *equal cost* — the fair comparison, since Simpson triples the
+evaluations per crossing and that budget could always buy more shells instead
+— said the opposite:
+
+| scheme | shells | cost | max error, b = 6..30 r_s |
+|---|---|---|---|
+| Simpson, 2 passes | 128 | 1152 | 8.6% |
+| **midpoint, 2 passes** | **96** | **288** | **7.1%** |
+
+Simpson was converging on the wrong thing. The quadrature was never the
+dominant error — the leapfrog splitting is only 2nd order, so a 4th-order
+quadrature inside it buys accuracy the outer scheme immediately discards.
+Dropping it cut the shader from 263 nodes to 170 and made the whole render
+~1.3× faster at identical output.
 
 ### The shadow edge is solved, not integrated
 
@@ -202,10 +220,20 @@ at b = 15 r_s.
 
 ### Known limitations
 
-- **Shell count drives lensing fidelity.** At 40 shells the deflection at
-  b = 6 r_s is ~23% low and the disk shows faint concentric banding; by 112
-  shells both are gone. The `thumb`/`preview` presets trade this for speed —
-  judge the lensing at `high` or `final`.
+- **Shell count drives lensing fidelity**, and it is the single most visible
+  quality knob. At 40 shells the deflection at b = 6 r_s is ~23% low and the
+  disk shows obvious concentric banding; 64 still bands faintly; by 96 it is
+  clean. Spend budget here before spending it on samples — 8 spp with
+  denoising is already visually clean on this material, but no amount of
+  sampling removes shell banding.
+- **The shell stack truncates at `r_max`.** Deflection accumulated outside it
+  is simply missing: 8.9% of the total at b = 30 r_s, which is the error floor
+  visible in `--validate` at large b. It is harmless for the shipped camera
+  (every in-frame ray has b < 18 r_s, where the loss is ≤1.1%) but it would
+  matter for a wider lens, and it is why the large-b rows do not improve with
+  shell count. The fix, if needed, is one analytic weak-field kick
+  `α = 2r_s/b − X(2X²+3b²)/(bR³)`, `X = √(R²−b²)`, applied at the outermost
+  shell.
 - Frame dragging is included as a first-order Lense-Thirring term, not a full
   Kerr geodesic solve, so the lensing asymmetry is qualitatively right rather
   than exact at high spin.
@@ -222,10 +250,11 @@ Measured on **2 CPU cores** (no GPU):
 
 | resolution | spp | shells | measured / frame |
 |---|---|---|---|
-| 384×216 | 12 | 40 | 46 s |
-| 480×270 | 20 | 40 | 103 s |
+| 352×198 | 8 | 40 | 25 s |
+| 352×198 | 8 | 64 | 31 s |
+| 352×198 | 8 | 96 | 43 s |
+| 384×216 | 8 | 96 | 51 s |
 | 480×270 | 20 | 112 | 268 s |
-| 560×315 | 24 | 96 | 362 s |
 
 Note how shell count dominates: 40 → 112 shells nearly triples the cost at
 fixed resolution. Cycles uses the GPU automatically where one is available

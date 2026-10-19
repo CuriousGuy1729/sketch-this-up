@@ -44,7 +44,7 @@ def build_shell_scheme(cfg: Config) -> ShellScheme:
 
 # ---------------------------------------------------------------------------
 
-def _simpson_impulse(nb: NodeBuilder, pos: Expr, direction: Expr,
+def _midpoint_impulse(nb: NodeBuilder, pos: Expr, direction: Expr,
                      r: Expr, r_hat: Expr, r_in: Expr, r_out: Expr,
                      spin: float, gain: float) -> Expr:
     """
@@ -53,8 +53,13 @@ def _simpson_impulse(nb: NodeBuilder, pos: Expr, direction: Expr,
     Mirrors ``physics.portal_kick._impulse``:
 
       * exact ray/sphere step length to the adjacent shell (three branches),
-      * Simpson quadrature of the acceleration along that segment,
+      * midpoint quadrature of the acceleration along that segment,
       * optional Lense-Thirring frame dragging.
+
+    Midpoint rather than Simpson: see the note in ``physics.portal_kick``.
+    Simpson triples the cost per crossing to refine a quadrature that was
+    never the dominant error, and at equal cost more shells beat it.  Dropping
+    it cut this shader from 263 nodes to a little over half that.
     """
     # --- conserved quantities of this straight segment ---------------------
     h_vec = pos.cross(direction)
@@ -74,7 +79,7 @@ def _simpson_impulse(nb: NodeBuilder, pos: Expr, direction: Expr,
     ds = nb.select(mu.lt(0.0), ds_inward, ds_outward)
     ds = ds.max(0.0)
 
-    # --- Simpson quadrature of a(s) over [0, ds] ---------------------------
+    # --- midpoint quadrature of a(s) over [0, ds] --------------------------
     def accel_at(point: Expr) -> Expr:
         rr = point.length().max(1e-6)
         a = point * (h2 * (-1.5 * gain) / (rr ** 4 * rr))   # = -1.5 h^2 P/r^5
@@ -84,10 +89,7 @@ def _simpson_impulse(nb: NodeBuilder, pos: Expr, direction: Expr,
             a = a + omega.cross(direction)
         return a
 
-    a0 = accel_at(pos)
-    a1 = accel_at(pos + direction * (ds * 0.5))
-    a2 = accel_at(pos + direction * ds)
-    return (a0 + a1 * 4.0 + a2) * (ds * (1.0 / 6.0))
+    return accel_at(pos + direction * (ds * 0.5)) * ds
 
 
 def build_lensing_material(cfg: Config, scheme: ShellScheme) -> bpy.types.Material:
@@ -123,8 +125,8 @@ def build_lensing_material(cfg: Config, scheme: ShellScheme) -> bpy.types.Materi
         r_out = (rp - ds_log).max(1e-9) ** (1.0 / p)
 
     def impulse(direction: Expr) -> Expr:
-        return _simpson_impulse(nb, pos, direction, r, r_hat,
-                                r_in, r_out, spin, gain)
+        return _midpoint_impulse(nb, pos, direction, r, r_hat,
+                                 r_in, r_out, spin, gain)
 
     # --- symmetric leapfrog with one corrector pass ------------------------
     # Half of the segment behind us, half of the segment ahead.  The forward
